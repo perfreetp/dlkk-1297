@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, Bookmark, Lightbulb, MessageCircle, ThumbsUp, Eye, Lock, Users } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useApp } from '../../contexts/AppContext';
 import { formatRelativeTime, formatDate, reviewTypeLabels } from '../../utils/formatters';
 
 export function ReviewsPage() {
+  const navigate = useNavigate();
   const { state, dispatch } = useApp();
   const { reviews, user } = state;
 
@@ -84,19 +85,22 @@ export function ReviewsPage() {
           <Button variant="secondary" onClick={() => setShowSidebar(!showSidebar)}>
             {showSidebar ? '隐藏侧边栏' : '显示侧边栏'}
           </Button>
-          <Link to="/reviews/new">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              写笔记
-            </Button>
-          </Link>
+          <Button onClick={() => navigate('/reviews/new')}>
+            <Plus className="w-4 h-4 mr-2" />
+            写笔记
+          </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           {filteredReviews.map(review => (
-            <Card key={review.id} hover className="cursor-pointer">
+            <Card 
+              key={review.id} 
+              hover 
+              className="cursor-pointer"
+              onClick={() => navigate(`/reviews/${review.id}`)}
+            >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
@@ -106,6 +110,11 @@ export function ReviewsPage() {
                   }`}>
                     {reviewTypeLabels[review.type]}
                   </span>
+                  {review.isPendingValidation && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-accent/10 text-accent">
+                      💡 待验证
+                    </span>
+                  )}
                   <div className="flex items-center gap-1 text-xs text-gray-500">
                     {review.visibility === 'private' ? (
                       <><Lock className="w-3 h-3" /> 私密</>
@@ -125,14 +134,12 @@ export function ReviewsPage() {
                 </button>
               </div>
 
-              <Link to={`/reviews/${review.id}`}>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2 hover:text-primary transition-colors">
-                  {review.title}
-                </h3>
-                <p className="text-sm text-gray-600 mb-4 line-clamp-3">
-                  {review.content.replace(/[#*`]/g, '').substring(0, 150)}...
-                </p>
-              </Link>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                {review.title}
+              </h3>
+              <p className="text-sm text-gray-600 mb-4 line-clamp-3">
+                {review.content.replace(/[#*`]/g, '').substring(0, 150)}...
+              </p>
 
               <div className="flex items-center gap-4 text-sm text-gray-500 mb-3">
                 {review.tags.slice(0, 3).map(tag => (
@@ -175,9 +182,7 @@ export function ReviewsPage() {
             <Card>
               <div className="text-center py-12">
                 <p className="text-gray-500 mb-4">暂无文章</p>
-                <Link to="/reviews/new">
-                  <Button>写第一篇笔记</Button>
-                </Link>
+                <Button onClick={() => navigate('/reviews/new')}>写第一篇笔记</Button>
               </div>
             </Card>
           )}
@@ -189,7 +194,11 @@ export function ReviewsPage() {
               {bookmarkedReviews.length > 0 ? (
                 <div className="space-y-3">
                   {bookmarkedReviews.map(review => (
-                    <div key={review.id} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                    <div 
+                      key={review.id} 
+                      className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                      onClick={() => navigate(`/reviews/${review.id}`)}
+                    >
                       <p className="text-sm font-medium text-gray-900 mb-1 line-clamp-1">
                         {review.title}
                       </p>
@@ -206,7 +215,11 @@ export function ReviewsPage() {
               {pendingValidationReviews.length > 0 ? (
                 <div className="space-y-3">
                   {pendingValidationReviews.map(review => (
-                    <div key={review.id} className="p-3 bg-accent/5 rounded-lg border border-accent/20">
+                    <div 
+                      key={review.id} 
+                      className="p-3 bg-accent/5 rounded-lg border border-accent/20 cursor-pointer hover:bg-accent/10 transition-colors"
+                      onClick={() => navigate(`/reviews/${review.id}`)}
+                    >
                       <p className="text-sm font-medium text-gray-900 mb-1 line-clamp-2">
                         {review.title}
                       </p>

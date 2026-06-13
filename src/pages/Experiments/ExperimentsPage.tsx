@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Calendar, Target, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Plus, Calendar, Target, CheckCircle, Clock, Edit, Save } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Select, Textarea } from '../../components/ui/Input';
@@ -15,6 +15,8 @@ export function ExperimentsPage() {
   const { experiments } = state;
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [filterStatus, setFilterStatus] = useState('all');
 
   const [formData, setFormData] = useState({
@@ -27,6 +29,12 @@ export function ExperimentsPage() {
     targetMetric: '',
     targetValue: '',
     hypothesis: ''
+  });
+
+  const [resultData, setResultData] = useState({
+    actualValue: '',
+    conclusion: '',
+    endDate: new Date().toISOString().split('T')[0]
   });
 
   const filteredExperiments = experiments.filter(e => {
@@ -69,6 +77,37 @@ export function ExperimentsPage() {
     });
   };
 
+  const handleFillResult = (experiment: Experiment) => {
+    setSelectedExperiment(experiment);
+    setResultData({
+      actualValue: experiment.actualValue?.toString() || '',
+      conclusion: experiment.conclusion || '',
+      endDate: experiment.endDate || new Date().toISOString().split('T')[0]
+    });
+    setShowResultModal(true);
+  };
+
+  const handleSubmitResult = () => {
+    if (!selectedExperiment) return;
+
+    const updatedExperiment: Experiment = {
+      ...selectedExperiment,
+      actualValue: parseFloat(resultData.actualValue),
+      conclusion: resultData.conclusion,
+      endDate: resultData.endDate,
+      status: 'completed'
+    };
+
+    dispatch({ type: 'UPDATE_EXPERIMENT', payload: updatedExperiment });
+    setShowResultModal(false);
+    setSelectedExperiment(null);
+    setResultData({
+      actualValue: '',
+      conclusion: '',
+      endDate: new Date().toISOString().split('T')[0]
+    });
+  };
+
   const ExperimentCard = ({ experiment }: { experiment: Experiment }) => {
     const progress = experiment.actualValue 
       ? (experiment.actualValue / experiment.targetValue) * 100 
@@ -76,14 +115,24 @@ export function ExperimentsPage() {
         ? 50 
         : 0;
 
+    const isSuccess = experiment.actualValue !== undefined && experiment.actualValue >= experiment.targetValue;
+
     return (
-      <div className="bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer">
+      <div className="bg-white rounded-xl p-4 border border-gray-200 hover:shadow-md transition-all duration-200">
         <div className="flex items-start justify-between mb-3">
           <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
             {experimentTypeLabels[experiment.type]}
           </span>
           {experiment.status === 'completed' && (
-            <CheckCircle className="w-5 h-5 text-success" />
+            <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${
+              isSuccess ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+            }`}>
+              {isSuccess ? (
+                <><CheckCircle className="w-3 h-3" /> 达成</>
+              ) : (
+                <><Clock className="w-3 h-3" /> 未达成</>
+              )}
+            </span>
           )}
         </div>
         
@@ -94,30 +143,61 @@ export function ExperimentsPage() {
           <div className="flex items-center gap-2 text-sm">
             <Target className="w-4 h-4 text-gray-400" />
             <span className="text-gray-600">{experiment.targetMetric}</span>
-            <span className="font-semibold text-gray-900 ml-auto">
+            <span className={`font-semibold ml-auto ${
+              experiment.status === 'completed' 
+                ? isSuccess ? 'text-green-600' : 'text-red-600'
+                : 'text-gray-900'
+            }`}>
               {experiment.actualValue !== undefined 
                 ? formatPercent(experiment.actualValue)
-                : `${experiment.targetValue}%`}
+                : `目标 ${experiment.targetValue}%`}
             </span>
           </div>
           <ProgressBar 
             value={experiment.actualValue || 0} 
             max={experiment.targetValue}
             size="sm"
-            color={progress >= 100 ? '#38a169' : '#1a365d'}
+            color={experiment.status === 'completed' 
+              ? isSuccess ? '#38a169' : '#e53e3e'
+              : progress >= 100 ? '#38a169' : '#1a365d'}
           />
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <Calendar className="w-3 h-3" />
-          <span>{formatDate(experiment.startDate, 'MM/dd')}</span>
-          {experiment.endDate && (
-            <>
-              <span> - </span>
-              <span>{formatDate(experiment.endDate, 'MM/dd')}</span>
-            </>
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-3 h-3" />
+            <span>{formatDate(experiment.startDate, 'MM/dd')}</span>
+            {experiment.endDate && (
+              <>
+                <span> - </span>
+                <span>{formatDate(experiment.endDate, 'MM/dd')}</span>
+              </>
+            )}
+          </div>
+          {experiment.status === 'running' && (
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFillResult(experiment);
+              }}
+              className="ml-auto"
+            >
+              <Edit className="w-3 h-3 mr-1" />
+              填写结果
+            </Button>
           )}
         </div>
+
+        {experiment.status === 'completed' && experiment.conclusion && (
+          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-600">
+              <span className="font-medium">结论：</span>
+              {experiment.conclusion}
+            </p>
+          </div>
+        )}
       </div>
     );
   };
@@ -302,6 +382,78 @@ export function ExperimentsPage() {
             placeholder="你的实验假设是什么？"
           />
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={showResultModal}
+        onClose={() => setShowResultModal(false)}
+        title="填写实验结果"
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowResultModal(false)}>取消</Button>
+            <Button onClick={handleSubmitResult} disabled={!resultData.actualValue}>
+              <Save className="w-4 h-4 mr-2" />
+              保存结果
+            </Button>
+          </>
+        }
+      >
+        {selectedExperiment && (
+          <div className="space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <h4 className="font-semibold text-gray-900 mb-2">{selectedExperiment.name}</h4>
+              <p className="text-sm text-gray-600 mb-3">{selectedExperiment.description}</p>
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-gray-500">目标：{selectedExperiment.targetMetric}</span>
+                <span className="font-semibold text-primary">{selectedExperiment.targetValue}%</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="实际达成值 (%)"
+                type="number"
+                value={resultData.actualValue}
+                onChange={(e) => setResultData({ ...resultData, actualValue: e.target.value })}
+                placeholder="35"
+                helper={`目标：${selectedExperiment.targetValue}%`}
+              />
+              <Input
+                label="结束日期"
+                type="date"
+                value={resultData.endDate}
+                onChange={(e) => setResultData({ ...resultData, endDate: e.target.value })}
+              />
+            </div>
+
+            <Textarea
+              label="实验结论"
+              value={resultData.conclusion}
+              onChange={(e) => setResultData({ ...resultData, conclusion: e.target.value })}
+              rows={4}
+              placeholder="总结实验的主要发现和结论..."
+            />
+
+            {resultData.actualValue && (
+              <div className={`p-4 rounded-lg ${
+                parseFloat(resultData.actualValue) >= selectedExperiment.targetValue 
+                  ? 'bg-green-50 border border-green-200' 
+                  : 'bg-red-50 border border-red-200'
+              }`}>
+                <p className={`text-sm font-medium ${
+                  parseFloat(resultData.actualValue) >= selectedExperiment.targetValue 
+                    ? 'text-green-700' 
+                    : 'text-red-700'
+                }`}>
+                  {parseFloat(resultData.actualValue) >= selectedExperiment.targetValue 
+                    ? '🎉 恭喜！实验达成目标' 
+                    : '⚠️ 实验未达成目标，建议分析原因'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

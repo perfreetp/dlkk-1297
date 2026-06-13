@@ -6,6 +6,8 @@ import { Dashboard } from './pages/Dashboard/Dashboard';
 import { RevenuePage } from './pages/Revenue/RevenuePage';
 import { ExperimentsPage } from './pages/Experiments/ExperimentsPage';
 import { ReviewsPage } from './pages/Reviews/ReviewsPage';
+import { ReviewEditor } from './pages/Reviews/ReviewEditor';
+import { ReviewDetail } from './pages/Reviews/ReviewDetail';
 import { GroupsPage } from './pages/Groups/GroupsPage';
 import { ToastContainer } from './components/ui/Toast';
 import { useToast } from './hooks/useToast';
@@ -21,8 +23,8 @@ function AppContent() {
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/experiments" element={<ExperimentsPage />} />
           <Route path="/reviews" element={<ReviewsPage />} />
-          <Route path="/reviews/:id" element={<ReviewsPage />} />
-          <Route path="/reviews/new" element={<ReviewsPage />} />
+          <Route path="/reviews/new" element={<ReviewEditor />} />
+          <Route path="/reviews/:id" element={<ReviewDetail />} />
           <Route path="/groups" element={<GroupsPage />} />
           <Route path="/groups/:id" element={<GroupsPage />} />
         </Routes>
