@@ -206,7 +206,35 @@ export function ReviewDetail() {
           讨论区 ({review.comments.length})
         </h3>
 
-        {isGroupMember || review.authorId === user?.id ? (
+        {review.visibility === 'group' ? (
+          <div className="mb-6">
+            <div className="flex items-start gap-3">
+              <img 
+                src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name}`}
+                alt={user?.name || '我'}
+                className="w-10 h-10 rounded-full"
+              />
+              <div className="flex-1">
+                <Textarea
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  placeholder="发表你的看法..."
+                  rows={3}
+                />
+                <div className="flex justify-end mt-2">
+                  <Button 
+                    onClick={handleSubmitComment}
+                    disabled={!commentText.trim() || isSubmitting}
+                    size="sm"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    发布评论
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : review.authorId === user?.id ? (
           <div className="mb-6">
             <div className="flex items-start gap-3">
               <img 
@@ -236,7 +264,7 @@ export function ReviewDetail() {
           </div>
         ) : (
           <div className="mb-6 p-4 bg-gray-50 rounded-lg text-center text-gray-500 text-sm">
-            加入小组后参与讨论
+            这是一篇私密笔记，只有作者可以评论
           </div>
         )}
 

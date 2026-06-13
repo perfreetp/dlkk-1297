@@ -129,7 +129,10 @@ export function GroupsPage() {
               key={group.id}
               hover
               className={`cursor-pointer ${selectedGroup?.id === group.id ? 'ring-2 ring-primary' : ''}`}
-              onClick={() => setSelectedGroup(group)}
+              onClick={() => {
+                const freshGroup = groups.find(g => g.id === group.id);
+                if (freshGroup) setSelectedGroup(freshGroup);
+              }}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">

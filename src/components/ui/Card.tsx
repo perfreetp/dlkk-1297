@@ -6,11 +6,15 @@ interface CardProps {
   className?: string;
   actions?: React.ReactNode;
   hover?: boolean;
+  onClick?: () => void;
 }
 
-export function Card({ title, children, className = '', actions, hover = false }: CardProps) {
+export function Card({ title, children, className = '', actions, hover = false, onClick }: CardProps) {
   return (
-    <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 ${hover ? 'hover:shadow-md hover:-translate-y-1 transition-all duration-300' : ''} ${className}`}>
+    <div 
+      className={`bg-white rounded-2xl shadow-sm border border-gray-100 ${hover ? 'hover:shadow-md hover:-translate-y-1 transition-all duration-300' : ''} ${className}`}
+      onClick={onClick}
+    >
       {(title || actions) && (
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           {title && <h3 className="text-lg font-semibold text-gray-900">{title}</h3>}
