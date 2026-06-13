@@ -1,9 +1,18 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { Revenue, Experiment, Review, Group, User, FilterState } from '../types';
+import { Revenue, Experiment, Review, Group, User, FilterState, Member } from '../types';
 import { storage } from '../services/storage';
+
+interface NavigationContext {
+  fromGroups: boolean;
+  fromReview: boolean;
+  groupId?: string;
+  reviewId?: string;
+}
 
 interface AppState {
   user: User | null;
+  viewingAs: Member | null;
+  navigationContext: NavigationContext;
   revenues: Revenue[];
   experiments: Experiment[];
   reviews: Review[];
@@ -14,6 +23,8 @@ interface AppState {
 
 type AppAction =
   | { type: 'SET_USER'; payload: User | null }
+  | { type: 'SET_VIEWING_AS'; payload: Member | null }
+  | { type: 'SET_NAVIGATION_CONTEXT'; payload: NavigationContext }
   | { type: 'SET_REVENUES'; payload: Revenue[] }
   | { type: 'ADD_REVENUE'; payload: Revenue }
   | { type: 'UPDATE_REVENUE'; payload: Revenue }
@@ -35,6 +46,11 @@ type AppAction =
 
 const initialState: AppState = {
   user: null,
+  viewingAs: null,
+  navigationContext: {
+    fromGroups: false,
+    fromReview: false
+  },
   revenues: [],
   experiments: [],
   reviews: [],
@@ -51,6 +67,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_USER':
       return { ...state, user: action.payload };
+    case 'SET_VIEWING_AS':
+      return { ...state, viewingAs: action.payload };
+    case 'SET_NAVIGATION_CONTEXT':
+      return { ...state, navigationContext: action.payload };
     case 'SET_REVENUES':
       return { ...state, revenues: action.payload };
     case 'ADD_REVENUE':
@@ -127,7 +147,7 @@ const AppContext = createContext<{
   dispatch: React.Dispatch<AppAction>;
 } | null>(null);
 
-export function AppProvider({ children }: { children: React.ReactNode }) {
+export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Calendar, Users, FileText, Bell, Settings, ChevronRight, UserPlus, X, Mail, Eye, ArrowLeft, MessageCircle } from 'lucide-react';
+import { Plus, Calendar, Users, FileText, Bell, Settings, ChevronRight, UserPlus, X, Mail, Eye, ArrowLeft, MessageCircle, History, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -13,12 +13,12 @@ import { v4 as uuidv4 } from 'uuid';
 export function GroupsPage() {
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
-  const { groups, reviews, user } = state;
+  const { groups, reviews, user, viewingAs } = state;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
-  const [viewingMember, setViewingMember] = useState<Member | null>(null);
+  const [showMemberActivity, setShowMemberActivity] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -32,15 +32,57 @@ export function GroupsPage() {
   });
 
   const memberGroups = useMemo(() => {
-    if (!viewingMember) return [];
-    return groups.filter(g => g.members.some(m => m.id === viewingMember.id));
-  }, [groups, viewingMember]);
+    if (!viewingAs) return [];
+    return groups.filter(g => g.members.some(m => m.id === viewingAs.id));
+  }, [groups, viewingAs]);
 
   const memberReviews = useMemo(() => {
-    if (!viewingMember) return [];
+    if (!viewingAs) return [];
     const memberGroupIds = memberGroups.map(g => g.id);
-    return reviews.filter(r => r.groupId && memberGroupIds.includes(r.groupId));
-  }, [reviews, memberGroups, viewingMember]);
+    return reviews
+      .filter(r => r.groupId && memberGroupIds.includes(r.groupId))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [reviews, memberGroups, viewingAs]);
+
+  const memberActivity = useMemo(() => {
+    if (!viewingAs) return [];
+    const activities: Array<{
+      type: 'comment' | 'created';
+      reviewTitle: string;
+      reviewId: string;
+      content: string;
+      time: string;
+      groupName: string;
+    }> = [];
+
+    memberReviews.forEach(review => {
+      const group = groups.find(g => g.id === review.groupId);
+      if (review.authorId === viewingAs.id) {
+        activities.push({
+          type: 'created',
+          reviewTitle: review.title,
+          reviewId: review.id,
+          content: '发布了笔记',
+          time: review.createdAt,
+          groupName: group?.name || '未知小组'
+        });
+      }
+
+      const memberComments = review.comments.filter(c => c.authorId === viewingAs.id);
+      memberComments.forEach(comment => {
+        activities.push({
+          type: 'comment',
+          reviewTitle: review.title,
+          reviewId: review.id,
+          content: comment.content,
+          time: comment.createdAt,
+          groupName: group?.name || '未知小组'
+        });
+      });
+    });
+
+    return activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+  }, [memberReviews, viewingAs, groups]);
 
   const handleCreateGroup = () => {
     if (!formData.name) return;
@@ -113,21 +155,71 @@ export function GroupsPage() {
     }
   };
 
+  const handleViewAsMember = (member: Member) => {
+    dispatch({ type: 'SET_VIEWING_AS', payload: member });
+  };
+
+  const handleClearViewingAs = () => {
+    dispatch({ type: 'SET_VIEWING_AS', payload: null });
+  };
+
   const getGroupReviews = (groupId: string) => {
-    return reviews.filter(r => r.groupId === groupId);
+    return reviews
+      .filter(r => r.groupId === groupId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   };
 
   const isAdmin = selectedGroup?.members.some(
     m => m.id === user?.id && m.role === 'admin'
   );
 
-  const handleViewAsMember = (member: Member) => {
-    setViewingMember(member);
-  };
+  const recentActivityReviews = useMemo(() => {
+    if (!selectedGroup) return [];
+    return reviews
+      .filter(r => r.groupId === selectedGroup.id)
+      .filter(r => r.comments.length > 0)
+      .sort((a, b) => {
+        const aLatest = a.comments.length > 0 
+          ? new Date(a.comments[a.comments.length - 1].createdAt).getTime()
+          : 0;
+        const bLatest = b.comments.length > 0 
+          ? new Date(b.comments[b.comments.length - 1].createdAt).getTime()
+          : 0;
+        return bLatest - aLatest;
+      })
+      .slice(0, 5);
+  }, [reviews, selectedGroup]);
 
-  const handleBackFromMemberView = () => {
-    setViewingMember(null);
-  };
+  const groupDiscussionTimeline = useMemo(() => {
+    if (!selectedGroup) return [];
+    const timeline: Array<{
+      type: 'comment' | 'created';
+      reviewTitle: string;
+      reviewId: string;
+      authorName: string;
+      content: string;
+      time: string;
+      review: any;
+    }> = [];
+
+    reviews
+      .filter(r => r.groupId === selectedGroup.id)
+      .forEach(review => {
+        review.comments.forEach(comment => {
+          timeline.push({
+            type: 'comment',
+            reviewTitle: review.title,
+            reviewId: review.id,
+            authorName: comment.authorName,
+            content: comment.content,
+            time: comment.createdAt,
+            review
+          });
+        });
+      });
+
+    return timeline.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+  }, [reviews, selectedGroup]);
 
   return (
     <div className="space-y-6">
@@ -135,17 +227,24 @@ export function GroupsPage() {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">我的小组</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {viewingMember ? `正在查看 ${viewingMember.name} 的视角` : '管理你的团队和复盘计划'}
+            {viewingAs 
+              ? `正在查看 ${viewingAs.name} 的视角` 
+              : '管理你的团队和复盘计划'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {viewingMember && (
-            <Button variant="secondary" onClick={handleBackFromMemberView}>
+          {viewingAs && (
+            <Button variant="secondary" onClick={() => setShowMemberActivity(!showMemberActivity)}>
+              <History className="w-4 h-4 mr-2" />
+              参与记录
+            </Button>
+          )}
+          {viewingAs ? (
+            <Button variant="primary" onClick={handleClearViewingAs}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               返回管理视图
             </Button>
-          )}
-          {!viewingMember && (
+          ) : (
             <Button onClick={() => setShowCreateModal(true)}>
               <Plus className="w-4 h-4 mr-2" />
               创建小组
@@ -154,21 +253,95 @@ export function GroupsPage() {
         </div>
       </div>
 
+      {viewingAs && showMemberActivity && (
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <History className="w-5 h-5 text-primary" />
+              {viewingAs.name} 的参与记录
+              <span className="text-xs text-gray-500">（{memberActivity.length} 条）</span>
+            </h3>
+            <button 
+              onClick={() => setShowMemberActivity(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {memberActivity.length > 0 ? (
+            <div className="relative">
+              <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary to-accent"></div>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {memberActivity.map((activity, idx) => (
+                  <div 
+                    key={idx}
+                    className="relative flex items-start gap-4 p-4 bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl hover:from-gray-100 hover:to-blue-100 transition-all cursor-pointer group"
+                    onClick={() => navigate(`/reviews/${activity.reviewId}`)}
+                  >
+                    <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center shadow-md ${
+                      activity.type === 'created' 
+                        ? 'bg-gradient-to-br from-primary to-blue-600' 
+                        : 'bg-gradient-to-br from-accent to-orange-500'
+                    }`}>
+                      {activity.type === 'created' ? (
+                        <FileText className="w-5 h-5 text-white" />
+                      ) : (
+                        <MessageCircle className="w-5 h-5 text-white" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                          {activity.groupName}
+                        </span>
+                        <span className="text-xs text-gray-400">·</span>
+                        <span className="text-xs text-gray-500">
+                          {activity.type === 'created' ? '发布了笔记' : '发表了评论'}
+                        </span>
+                      </div>
+                      <p className="font-medium text-gray-900 mb-1">{activity.reviewTitle}</p>
+                      {activity.type === 'comment' && (
+                        <p className="text-sm text-gray-600 line-clamp-2 mb-1">{activity.content}</p>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <span>{formatRelativeTime(activity.time)}</span>
+                        <span>·</span>
+                        <span className="text-primary group-hover:underline">查看详情 →</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <History className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 mb-2">暂无参与记录</p>
+              <p className="text-sm text-gray-400">
+                {viewingAs.name} 加入的小组还没有笔记或讨论
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-4">
-          {viewingMember ? (
-            <Card title={`${viewingMember.name} 加入的小组`}>
+          {viewingAs ? (
+            <Card title={`${viewingAs.name} 加入的小组`}>
               <div className="space-y-3">
                 {memberGroups.length > 0 ? (
                   memberGroups.map(group => (
                     <div 
                       key={group.id}
-                      className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                        selectedGroup?.id === group.id 
+                          ? 'bg-primary/10 border border-primary/30' 
+                          : 'bg-gray-50 hover:bg-gray-100'
+                      }`}
                       onClick={() => {
                         const freshGroup = groups.find(g => g.id === group.id);
-                        if (freshGroup) {
-                          setSelectedGroup(freshGroup);
-                        }
+                        if (freshGroup) setSelectedGroup(freshGroup);
                       }}
                     >
                       <div className="flex items-center gap-3">
@@ -224,7 +397,7 @@ export function GroupsPage() {
             ))
           )}
 
-          {groups.length === 0 && !viewingMember && (
+          {groups.length === 0 && !viewingAs && (
             <Card>
               <div className="text-center py-8">
                 <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -238,18 +411,18 @@ export function GroupsPage() {
         </div>
 
         <div className="lg:col-span-2">
-          {viewingMember ? (
+          {viewingAs ? (
             <div className="space-y-6">
               <Card>
                 <div className="flex items-center gap-4 mb-6 p-4 bg-gradient-to-r from-primary/10 to-blue-500/10 rounded-xl">
                   <img 
-                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${viewingMember.name}`}
-                    alt={viewingMember.name}
+                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${viewingAs.name}`}
+                    alt={viewingAs.name}
                     className="w-16 h-16 rounded-full border-4 border-white shadow-lg"
                   />
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">{viewingMember.name}</h2>
-                    <p className="text-gray-600">{viewingMember.email}</p>
+                    <h2 className="text-xl font-bold text-gray-900">{viewingAs.name}</h2>
+                    <p className="text-gray-600">{viewingAs.email}</p>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="px-2 py-0.5 text-xs bg-primary/20 text-primary rounded-full">
                         已加入 {memberGroups.length} 个小组
@@ -257,12 +430,21 @@ export function GroupsPage() {
                       <span className="px-2 py-0.5 text-xs bg-accent/20 text-accent rounded-full">
                         {memberReviews.length} 篇笔记
                       </span>
+                      <span className="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                        {memberActivity.filter(a => a.type === 'comment').length} 条评论
+                      </span>
                     </div>
                   </div>
                 </div>
 
+                <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+                  <p className="text-sm text-blue-700">
+                    <strong>💡 提示：</strong>您正在以 {viewingAs.name} 的身份查看小组内容，可以发表笔记和评论来验证协作流程。
+                  </p>
+                </div>
+
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-primary" />
+                  <Zap className="w-5 h-5 text-accent" />
                   可参与的笔记
                 </h3>
                 {memberReviews.length > 0 ? (
@@ -270,7 +452,7 @@ export function GroupsPage() {
                     {memberReviews.map(review => (
                       <div 
                         key={review.id}
-                        className="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                        className="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer border border-gray-100 hover:border-primary/30"
                         onClick={() => navigate(`/reviews/${review.id}`)}
                       >
                         <div className="flex items-start justify-between mb-2">
@@ -280,7 +462,14 @@ export function GroupsPage() {
                             </span>
                             <h4 className="font-medium text-gray-900">{review.title}</h4>
                           </div>
-                          <MessageCircle className="w-4 h-4 text-gray-400" />
+                          <div className="flex items-center gap-2">
+                            {review.comments.length > 0 && (
+                              <span className="px-2 py-0.5 text-xs bg-accent/10 text-accent rounded-full">
+                                {review.comments.length} 条讨论
+                              </span>
+                            )}
+                            <MessageCircle className="w-4 h-4 text-gray-400" />
+                          </div>
                         </div>
                         <p className="text-sm text-gray-500 line-clamp-2 mb-2">
                           {review.content.substring(0, 80)}...
@@ -292,6 +481,20 @@ export function GroupsPage() {
                           <span>·</span>
                           <span>{formatRelativeTime(review.createdAt)}</span>
                         </div>
+                        {review.comments.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <p className="text-xs text-gray-500 mb-2">最新讨论：</p>
+                            <div className="flex items-center gap-2 text-xs text-gray-600">
+                              <img 
+                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${review.comments[review.comments.length - 1].authorName}`}
+                                alt={review.comments[review.comments.length - 1].authorName}
+                                className="w-4 h-4 rounded-full"
+                              />
+                              <span className="font-medium">{review.comments[review.comments.length - 1].authorName}:</span>
+                              <span className="line-clamp-1">{review.comments[review.comments.length - 1].content}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -402,7 +605,89 @@ export function GroupsPage() {
                 </div>
               </Card>
 
-              <Card title={`近期笔记 (${reviews.filter(r => r.groupId === selectedGroup.id).length})`}>
+              {recentActivityReviews.length > 0 && (
+                <Card title="最近有动态的笔记">
+                  <div className="space-y-3">
+                    {recentActivityReviews.map(review => {
+                      const lastComment = review.comments[review.comments.length - 1];
+                      return (
+                        <div 
+                          key={review.id}
+                          className="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                          onClick={() => navigate(`/reviews/${review.id}`)}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="font-medium text-gray-900">{review.title}</h4>
+                            <span className="text-xs text-gray-500">{formatDate(review.createdAt)}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 line-clamp-1 mb-2">
+                            {review.content.substring(0, 80)}...
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <MessageCircle className="w-3 h-3" />
+                              <span>{review.comments.length} 条评论</span>
+                            </div>
+                            {lastComment && (
+                              <div className="flex items-center gap-2 text-xs text-accent">
+                                <img 
+                                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${lastComment.authorName}`}
+                                  alt={lastComment.authorName}
+                                  className="w-4 h-4 rounded-full"
+                                />
+                                <span>{lastComment.authorName}: {lastComment.content.substring(0, 20)}...</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
+
+              {groupDiscussionTimeline.length > 0 && (
+                <Card title={`小组讨论时间线 (${groupDiscussionTimeline.length})`}>
+                  <div className="relative">
+                    <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary via-accent to-gray-200"></div>
+                    <div className="space-y-4">
+                      {groupDiscussionTimeline.slice(0, 8).map((item, idx) => (
+                        <div 
+                          key={idx}
+                          className="relative flex items-start gap-4 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer group"
+                          onClick={() => navigate(`/reviews/${item.reviewId}`)}
+                        >
+                          <div className="relative z-10 w-10 h-10 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform">
+                            <MessageCircle className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-gray-900">{item.authorName}</span>
+                              <span className="text-xs text-gray-400">评论了</span>
+                              <span className="text-xs text-primary font-medium">{item.reviewTitle}</span>
+                            </div>
+                            <p className="text-sm text-gray-600 line-clamp-2">{item.content}</p>
+                            <p className="text-xs text-gray-400 mt-1">{formatRelativeTime(item.time)}</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      ))}
+                    </div>
+                    {groupDiscussionTimeline.length > 8 && (
+                      <div className="mt-4 text-center">
+                        <button 
+                          className="text-sm text-primary hover:text-blue-700"
+                          onClick={() => navigate('/reviews')}
+                        >
+                          查看更多讨论 →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+
+              <Card title={`所有笔记 (${reviews.filter(r => r.groupId === selectedGroup.id).length})`}>
                 {getGroupReviews(selectedGroup.id).length > 0 ? (
                   <div className="space-y-3">
                     {getGroupReviews(selectedGroup.id).map(review => (

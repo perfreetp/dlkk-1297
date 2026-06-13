@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ThumbsUp, MessageCircle, Eye, Bookmark, Lock, Users, Send, Lightbulb } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, ThumbsUp, MessageCircle, Eye, Bookmark, Lock, Users, Send, Lightbulb, ChevronRight, Activity, ArrowRight } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Textarea } from '../../components/ui/Input';
@@ -13,15 +13,30 @@ export function ReviewDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
-  const { reviews, user, groups } = state;
+  const { reviews, user, groups, viewingAs, navigationContext } = state;
 
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const review = reviews.find(r => r.id === id);
+  
+  const currentUser = viewingAs || user;
+  
+  const relatedGroup = useMemo(() => {
+    return groups.find(g => g.id === review?.groupId);
+  }, [groups, review?.groupId]);
 
   useEffect(() => {
     if (review) {
+      dispatch({
+        type: 'SET_NAVIGATION_CONTEXT',
+        payload: {
+          fromGroups: true,
+          fromReview: false,
+          groupId: review.groupId,
+          reviewId: review.id
+        }
+      });
       const updatedReview = { ...review, views: review.views + 1 };
       dispatch({ type: 'UPDATE_REVIEW', payload: updatedReview });
     }
@@ -41,12 +56,12 @@ export function ReviewDetail() {
   }
 
   const isGroupMember = review.groupId 
-    ? groups.find(g => g.id === review.groupId)?.members.some(m => m.id === user?.id)
+    ? relatedGroup?.members.some(m => m.id === currentUser?.id)
     : true;
 
   const canView = review.visibility === 'private' 
-    ? review.authorId === user?.id
-    : isGroupMember || review.authorId === user?.id;
+    ? review.authorId === currentUser?.id
+    : isGroupMember || review.authorId === currentUser?.id;
 
   if (!canView) {
     return (
@@ -78,8 +93,8 @@ export function ReviewDetail() {
     
     const newComment: Comment = {
       id: uuidv4(),
-      authorId: user?.id || 'user-001',
-      authorName: user?.name || '匿名用户',
+      authorId: currentUser?.id || 'user-001',
+      authorName: currentUser?.name || '匿名用户',
       content: commentText.trim(),
       createdAt: new Date().toISOString()
     };
@@ -92,6 +107,38 @@ export function ReviewDetail() {
     setCommentText('');
     setIsSubmitting(false);
   };
+
+  const handleBack = () => {
+    dispatch({
+      type: 'SET_NAVIGATION_CONTEXT',
+      payload: {
+        fromGroups: false,
+        fromReview: false
+      }
+    });
+    
+    if (navigationContext.fromReview) {
+      navigate('/reviews');
+    } else if (viewingAs && navigationContext.groupId) {
+      navigate('/groups');
+    } else if (review.groupId) {
+      navigate('/groups');
+    } else {
+      navigate('/reviews');
+    }
+  };
+
+  const getBackPath = () => {
+    if (viewingAs && navigationContext.groupId) {
+      return { label: relatedGroup?.name || '小组', path: '/groups' };
+    } else if (review.groupId) {
+      return { label: relatedGroup?.name || '小组', path: '/groups' };
+    } else {
+      return { label: '复盘文章', path: '/reviews' };
+    }
+  };
+
+  const backPath = getBackPath();
 
   const renderMarkdown = (text: string) => {
     return text
@@ -106,15 +153,39 @@ export function ReviewDetail() {
       .replace(/\n/gim, '<br/>');
   };
 
+  const sortedComments = useMemo(() => {
+    return [...review.comments].sort((a, b) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  }, [review.comments]);
+
   return (
     <div className="max-w-4xl mx-auto">
       <button
-        onClick={() => navigate('/reviews')}
-        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-6"
+        onClick={handleBack}
+        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-4"
       >
         <ArrowLeft className="w-5 h-5" />
-        <span>返回列表</span>
+        <span>返回 {backPath.label}</span>
       </button>
+
+      <div className="flex items-center gap-2 text-sm text-gray-500 mb-4 bg-gradient-to-r from-gray-50 to-blue-50 p-3 rounded-lg border border-gray-100">
+        <Link to={backPath.path} className="hover:text-primary flex items-center gap-1">
+          {backPath.label}
+        </Link>
+        {relatedGroup && (
+          <>
+            <ChevronRight className="w-4 h-4" />
+            <span className="text-gray-700 font-medium truncate max-w-[200px]">{review.title}</span>
+          </>
+        )}
+        {viewingAs && (
+          <span className="ml-auto px-2 py-0.5 text-xs bg-accent/10 text-accent rounded-full flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-accent rounded-full"></span>
+            {viewingAs.name} 的视角
+          </span>
+        )}
+      </div>
 
       <Card className="mb-6">
         <div className="flex items-start justify-between mb-4">
@@ -202,16 +273,17 @@ export function ReviewDetail() {
       </Card>
 
       <Card>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Activity className="w-5 h-5 text-primary" />
           讨论区 ({review.comments.length})
         </h3>
 
-        {review.visibility === 'group' ? (
+        {review.visibility === 'group' || review.authorId === currentUser?.id ? (
           <div className="mb-6">
             <div className="flex items-start gap-3">
               <img 
-                src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name}`}
-                alt={user?.name || '我'}
+                src={currentUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`}
+                alt={currentUser?.name || '我'}
                 className="w-10 h-10 rounded-full"
               />
               <div className="flex-1">
@@ -234,12 +306,12 @@ export function ReviewDetail() {
               </div>
             </div>
           </div>
-        ) : review.authorId === user?.id ? (
+        ) : review.authorId === currentUser?.id ? (
           <div className="mb-6">
             <div className="flex items-start gap-3">
               <img 
-                src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name}`}
-                alt={user?.name || '我'}
+                src={currentUser?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`}
+                alt={currentUser?.name || '我'}
                 className="w-10 h-10 rounded-full"
               />
               <div className="flex-1">
@@ -275,7 +347,7 @@ export function ReviewDetail() {
               <p>暂无评论，来发表第一个看法吧</p>
             </div>
           ) : (
-            review.comments.map(comment => (
+            sortedComments.map((comment, index) => (
               <div key={comment.id} className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
                 <img 
                   src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.authorName}`}
@@ -285,7 +357,19 @@ export function ReviewDetail() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-medium text-gray-900">{comment.authorName}</span>
-                    <span className="text-xs text-gray-500">{formatRelativeTime(comment.createdAt)}</span>
+                    {comment.authorId === review.authorId && (
+                      <span className="px-1.5 py-0.5 text-xs bg-primary/10 text-primary rounded">
+                        作者
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400">
+                      {formatRelativeTime(comment.createdAt)}
+                    </span>
+                    {index > 0 && (
+                      <span className="text-xs text-gray-400">
+                        · #{index + 1}
+                      </span>
+                    )}
                   </div>
                   <p className="text-gray-700">{comment.content}</p>
                 </div>
