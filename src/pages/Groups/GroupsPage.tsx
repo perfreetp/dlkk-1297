@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { Plus, Calendar, Users, FileText, Bell, Settings, ChevronRight, UserPlus, X, Mail } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Calendar, Users, FileText, Bell, Settings, ChevronRight, UserPlus, X, Mail, Eye, ArrowLeft, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Textarea } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { useApp } from '../../contexts/AppContext';
-import { formatDate } from '../../utils/formatters';
+import { formatDate, formatRelativeTime } from '../../utils/formatters';
 import { Group, Member } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -18,6 +18,7 @@ export function GroupsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [viewingMember, setViewingMember] = useState<Member | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -29,6 +30,17 @@ export function GroupsPage() {
     name: '',
     email: ''
   });
+
+  const memberGroups = useMemo(() => {
+    if (!viewingMember) return [];
+    return groups.filter(g => g.members.some(m => m.id === viewingMember.id));
+  }, [groups, viewingMember]);
+
+  const memberReviews = useMemo(() => {
+    if (!viewingMember) return [];
+    const memberGroupIds = memberGroups.map(g => g.id);
+    return reviews.filter(r => r.groupId && memberGroupIds.includes(r.groupId));
+  }, [reviews, memberGroups, viewingMember]);
 
   const handleCreateGroup = () => {
     if (!formData.name) return;
@@ -102,63 +114,117 @@ export function GroupsPage() {
   };
 
   const getGroupReviews = (groupId: string) => {
-    return reviews.filter(r => r.groupId === groupId).slice(0, 3);
+    return reviews.filter(r => r.groupId === groupId);
   };
 
   const isAdmin = selectedGroup?.members.some(
     m => m.id === user?.id && m.role === 'admin'
   );
 
+  const handleViewAsMember = (member: Member) => {
+    setViewingMember(member);
+  };
+
+  const handleBackFromMemberView = () => {
+    setViewingMember(null);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">我的小组</h2>
-          <p className="text-sm text-gray-500 mt-1">管理你的团队和复盘计划</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {viewingMember ? `正在查看 ${viewingMember.name} 的视角` : '管理你的团队和复盘计划'}
+          </p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          创建小组
-        </Button>
+        <div className="flex items-center gap-2">
+          {viewingMember && (
+            <Button variant="secondary" onClick={handleBackFromMemberView}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              返回管理视图
+            </Button>
+          )}
+          {!viewingMember && (
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              创建小组
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-4">
-          {groups.map(group => (
-            <Card 
-              key={group.id}
-              hover
-              className={`cursor-pointer ${selectedGroup?.id === group.id ? 'ring-2 ring-primary' : ''}`}
-              onClick={() => {
-                const freshGroup = groups.find(g => g.id === group.id);
-                if (freshGroup) setSelectedGroup(freshGroup);
-              }}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-blue-500/20 flex items-center justify-center text-2xl">
-                    {group.avatar}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{group.name}</h3>
-                    <p className="text-sm text-gray-500">{group.members.length} 位成员</p>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-gray-400" />
+          {viewingMember ? (
+            <Card title={`${viewingMember.name} 加入的小组`}>
+              <div className="space-y-3">
+                {memberGroups.length > 0 ? (
+                  memberGroups.map(group => (
+                    <div 
+                      key={group.id}
+                      className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                      onClick={() => {
+                        const freshGroup = groups.find(g => g.id === group.id);
+                        if (freshGroup) {
+                          setSelectedGroup(freshGroup);
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-blue-500/20 flex items-center justify-center text-lg">
+                          {group.avatar}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{group.name}</p>
+                          <p className="text-xs text-gray-500">{group.members.length} 位成员</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-gray-400" />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 text-center py-4">该成员还未加入任何小组</p>
+                )}
               </div>
-              
-              <p className="text-sm text-gray-600 mb-3 line-clamp-2">{group.description}</p>
-              
-              {group.nextReviewDate && (
-                <div className="flex items-center gap-2 text-sm text-primary">
-                  <Bell className="w-4 h-4" />
-                  <span>下次复盘: {formatDate(group.nextReviewDate)}</span>
-                </div>
-              )}
             </Card>
-          ))}
+          ) : (
+            groups.map(group => (
+              <Card 
+                key={group.id}
+                hover
+                className={`cursor-pointer ${selectedGroup?.id === group.id ? 'ring-2 ring-primary' : ''}`}
+                onClick={() => {
+                  const freshGroup = groups.find(g => g.id === group.id);
+                  if (freshGroup) setSelectedGroup(freshGroup);
+                }}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-blue-500/20 flex items-center justify-center text-2xl">
+                      {group.avatar}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{group.name}</h3>
+                      <p className="text-sm text-gray-500">{group.members.length} 位成员</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                </div>
+                
+                <p className="text-sm text-gray-600 mb-3 line-clamp-2">{group.description}</p>
+                
+                {group.nextReviewDate && (
+                  <div className="flex items-center gap-2 text-sm text-primary">
+                    <Bell className="w-4 h-4" />
+                    <span>下次复盘: {formatDate(group.nextReviewDate)}</span>
+                  </div>
+                )}
+              </Card>
+            ))
+          )}
 
-          {groups.length === 0 && (
+          {groups.length === 0 && !viewingMember && (
             <Card>
               <div className="text-center py-8">
                 <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -172,7 +238,71 @@ export function GroupsPage() {
         </div>
 
         <div className="lg:col-span-2">
-          {selectedGroup ? (
+          {viewingMember ? (
+            <div className="space-y-6">
+              <Card>
+                <div className="flex items-center gap-4 mb-6 p-4 bg-gradient-to-r from-primary/10 to-blue-500/10 rounded-xl">
+                  <img 
+                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${viewingMember.name}`}
+                    alt={viewingMember.name}
+                    className="w-16 h-16 rounded-full border-4 border-white shadow-lg"
+                  />
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">{viewingMember.name}</h2>
+                    <p className="text-gray-600">{viewingMember.email}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="px-2 py-0.5 text-xs bg-primary/20 text-primary rounded-full">
+                        已加入 {memberGroups.length} 个小组
+                      </span>
+                      <span className="px-2 py-0.5 text-xs bg-accent/20 text-accent rounded-full">
+                        {memberReviews.length} 篇笔记
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  可参与的笔记
+                </h3>
+                {memberReviews.length > 0 ? (
+                  <div className="space-y-3">
+                    {memberReviews.map(review => (
+                      <div 
+                        key={review.id}
+                        className="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                        onClick={() => navigate(`/reviews/${review.id}`)}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
+                              {groups.find(g => g.id === review.groupId)?.name}
+                            </span>
+                            <h4 className="font-medium text-gray-900">{review.title}</h4>
+                          </div>
+                          <MessageCircle className="w-4 h-4 text-gray-400" />
+                        </div>
+                        <p className="text-sm text-gray-500 line-clamp-2 mb-2">
+                          {review.content.substring(0, 80)}...
+                        </p>
+                        <div className="flex items-center gap-4 text-xs text-gray-400">
+                          <span>作者: {review.authorName}</span>
+                          <span>·</span>
+                          <span>{review.comments.length} 条评论</span>
+                          <span>·</span>
+                          <span>{formatRelativeTime(review.createdAt)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 text-center py-8">
+                    这些小组还没有笔记，快去发布第一篇吧！
+                  </p>
+                )}
+              </Card>
+            </div>
+          ) : selectedGroup ? (
             <div className="space-y-6">
               <Card>
                 <div className="flex items-start justify-between mb-6">
@@ -209,9 +339,9 @@ export function GroupsPage() {
                         </Button>
                       )}
                     </div>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
                       {selectedGroup.members.map(member => (
-                        <div key={member.id} className="flex items-center gap-3 p-2 bg-white rounded-lg">
+                        <div key={member.id} className="flex items-center gap-3 p-2 bg-white rounded-lg group">
                           <img 
                             src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${member.name}`}
                             alt={member.name}
@@ -226,14 +356,23 @@ export function GroupsPage() {
                               管理员
                             </span>
                           )}
-                          {isAdmin && member.role !== 'admin' && (
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
-                              onClick={() => handleRemoveMember(member.id)}
-                              className="p-1 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"
+                              onClick={() => handleViewAsMember(member)}
+                              className="p-1.5 hover:bg-blue-50 rounded text-gray-400 hover:text-blue-600"
+                              title="以该成员视角查看"
                             >
-                              <X className="w-4 h-4" />
+                              <Eye className="w-4 h-4" />
                             </button>
-                          )}
+                            {isAdmin && member.role !== 'admin' && (
+                              <button
+                                onClick={() => handleRemoveMember(member.id)}
+                                className="p-1.5 hover:bg-red-50 rounded text-gray-400 hover:text-red-500"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -277,10 +416,22 @@ export function GroupsPage() {
                           <span className="text-xs text-gray-500">{formatDate(review.createdAt)}</span>
                         </div>
                         <p className="text-sm text-gray-600 line-clamp-2">{review.content.substring(0, 100)}...</p>
-                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                          <span>{review.authorName}</span>
-                          <span>·</span>
-                          <span>{review.comments.length} 评论</span>
+                        <div className="flex items-center justify-between mt-2">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>作者: {review.authorName}</span>
+                            <span>·</span>
+                            <span>{review.comments.length} 条评论</span>
+                          </div>
+                          <button 
+                            className="text-xs text-primary hover:text-blue-700 flex items-center gap-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/reviews/${review.id}`);
+                            }}
+                          >
+                            查看详情
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
                         </div>
                       </div>
                     ))}
